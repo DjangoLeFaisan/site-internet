@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Smash JS — Tactical Online</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #07070f; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden; font-family: 'Rajdhani', sans-serif; color: white;
+        }
+        /* ── LOBBY ── */
+        #lobby { display: flex; flex-direction: column; align-items: center; gap: 30px; animation: fadeUp .5s ease; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        .title-wrap h1 {
+            font-family: 'Orbitron', monospace; font-size: 46px; font-weight: 900; letter-spacing: 6px;
+            background: linear-gradient(135deg, #f1c40f, #e67e22); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .lobby-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 25px; border-radius: 15px; width: 500px; }
+        .player-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        input, select, button { font-family: 'Orbitron'; padding: 10px; background: #111; color: white; border: 1px solid #333; border-radius: 5px; }
+        button { cursor: pointer; background: #e67e22; border: none; font-weight: bold; }
+        button:hover { background: #f1c40f; }
+        
+        /* ── GAME WRAPPER ── */
+        #game-wrapper { display:none; flex-direction:column; align-items:center; }
+        #ui { width:1600px; display:flex; flex-wrap: wrap; gap: 15px; justify-content:center; margin-bottom:10px; }
+        .stats {
+            background: rgba(0,0,0,.65); backdrop-filter: blur(8px); padding: 10px 14px; border-radius: 12px; min-width: 158px;
+            border: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; gap: 3px;
+        }
+        .stats-name { font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; color:#aaa; }
+        .pct { font-family:'Orbitron',monospace; font-size:30px; font-weight:900; }
+        .stocks { color:#f1c40f; font-size:14px; }
+        canvas { display:block; border-radius:6px; border:1px solid rgba(255,255,255,.04); box-shadow:0 0 60px rgba(0,0,0,.8); }
+        
+        /* ── ECRANS SPÉCIAUX ── */
+        #gameover-screen { display:none; position:absolute; inset:0; background:rgba(0,0,0,0.85); flex-direction:column; align-items:center; justify-content:center; z-index:100; }
+        #gameover-screen h1 { font-family: 'Orbitron'; font-size: 3em; color: #f1c40f; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="lobby">
+    <div class="title-wrap">
+        <h1>SUPER SMASH JS — ONLINE</h1>
+    </div>
+    <div class="lobby-box">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="myName" value="Joueur" placeholder="Ton pseudo" maxlength="12" style="flex: 2;" onchange="updateProfile()">
+            <select id="myPerk" style="flex: 1;" onchange="updateProfile()">
+                <option value="triple_jump">Triple Saut</option>
+                <option value="damage_boost">Dégâts x1.5</option>
+                <option value="speed_boost">Vitesse x1.3</option>
+            </select>
+            <button id="readyBtn" onclick="toggleReady()">PRÊT</button>
+        </div>
+        <div id="players-list"></div>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button onclick="addBot()" style="background: #3498db;">+ AJOUTER UN BOT</button>
+            <button id="startBtn" onclick="startGame()" style="display:none; flex: 1; background: #2ecc71;">LANCER LA PARTIE</button>
+        </div>
+    </div>
+</div>
+
+<div id="game-wrapper">
+    <div id="ui"></div>
+    <canvas id="gameCanvas" width="1600" height="600"></canvas>
+    <div style="margin-top: 10px; color: #555; font-size: 14px;">
+        <b>←→</b> Déplacer | <b>↑</b> Sauter | <b>Espace</b> Attaque | <b>X (maintenir)</b> Smash | <b>C</b> Projectile
+    </div>
+</div>
+
+<div id="gameover-screen">
+    <h1 id="winner-text">VICTOIRE !</h1>
+    <p id="kills-text" style="font-size: 1.5em; color: #aaa;"></p>
+    <p style="margin-top: 20px; color: #555;">Retour au salon automatique...</p>
+</div>
+
+<script>
+    const socket = io();
+    let myReadyStatus = false;
+    let localInputs = { left: false, right: false, jump: false, attack: false, shoot: false, charge: false };
+    let particles = [];
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiDiv = document.getElementById('ui');
+
+    window.updateProfile = function() {
+        socket.emit('update_profile', {
+            name: document.getElementById('myName').value,
+            perk: document.getElementById('myPerk').value,
+            ready: myReadyStatus
+        });
+    }
+
+    window.toggleReady = function() {
+        myReadyStatus = !myReadyStatus;
+        document.getElementById('readyBtn').style.background = myReadyStatus ? '#2ecc71' : '#e67e22';
+        document.getElementById('readyBtn').innerText = myReadyStatus ? 'OK' : 'PRÊT';
+        updateProfile();
+    }
+
+    window.addBot = function() { socket.emit('add_bot'); }
+    window.startGame = function() { socket.emit('start_game'); }
+    window.removeBot = function(id) { socket.emit('remove_bot', id); }
+
+    socket.on('lobby_update', (players) => {
+        const list = document.getElementById('players-list');
+        list.innerHTML = '';
+        let allReady = true;
+        let humanCount = 0;
+        
+        players.forEach(p => {
+            if(!p.isBot && !p.isSpectator) humanCount++;
+            
+            // Bouton de suppression spécifique aux bots
+            let botRemoveBtn = p.isBot ? `<button onclick="removeBot('${p.id}')" style="background:#ff4757; padding:2px 8px; font-size:11px; margin-left:10px;">X</button>` : '';
+            
+            list.innerHTML += `
+                <div class="player-slot">
+                    <span><span style="color:${p.color}">■</span> <b>${p.name}</b> ${p.isSpectator ? '(Spectateur)' : '('+p.perk+')'}</span>
+                    <span>${p.isSpectator ? '' : (p.ready ? '<span style="color:#2ecc71">PRÊT</span>' : '<span style="color:#e74c3c">ATTENTE</span>')} ${botRemoveBtn}</span>
+                </div>`;
+            if(!p.ready && !p.isSpectator) allReady = false;
+        });
+
+        document.getElementById('startBtn').style.display = (allReady && players.filter(p=>!p.isSpectator).length >= 2) ? 'block' : 'none';
+    });
+
+    socket.on('state_update', (state) => {
+        document.getElementById('gameover-screen').style.display = 'none';
+        if (state === 'WAITING') {
+            document.getElementById('lobby').style.display = 'flex';
+            document.getElementById('game-wrapper').style.display = 'none';
+            myReadyStatus = false;
+            document.getElementById('readyBtn').style.background = '#e67e22';
+            document.getElementById('readyBtn').innerText = 'PRÊT';
+        } else if (state === 'PLAYING') {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game-wrapper').style.display = 'flex';
+        }
+    });
+
+    socket.on('game_over', (data) => {
+        document.getElementById('gameover-screen').style.display = 'flex';
+        document.getElementById('winner-text').innerText = `${data.name.toUpperCase()} REMPORTE LA PARTIE !`;
+        document.getElementById('kills-text').innerText = `Kills : ${data.kills}`;
+    });
+
+    window.addEventListener('keydown', e => {
+        let changed = false;
+        if (e.code === 'ArrowLeft') { localInputs.left = true; changed = true; }
+        if (e.code === 'ArrowRight') { localInputs.right = true; changed = true; }
+        if (e.code === 'ArrowUp') { localInputs.jump = true; changed = true; }
+        if (e.code === 'Space') { localInputs.attack = true; changed = true; }
+        if (e.code === 'KeyC') { localInputs.shoot = true; changed = true; }
+        if (e.code === 'KeyX') { localInputs.charge = true; changed = true; }
+        if (changed) {
+            socket.emit('player_input', localInputs);
+            if(e.code === 'ArrowUp') localInputs.jump = false;
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        let changed = false;
+        if (e.code === 'ArrowLeft') { localInputs.left = false; changed = true; }
+        if (e.code === 'ArrowRight') { localInputs.right = false; changed = true; }
+        if (e.code === 'Space') { localInputs.attack = false; changed = true; }
+        if (e.code === 'KeyC') { localInputs.shoot = false; changed = true; }
+        if (e.code === 'KeyX') { localInputs.charge = false; changed = true; }
+        if (changed) socket.emit('player_input', localInputs);
+    });
+
+    socket.on('spawn_particles', (data) => {
+        for (let i = 0; i < data.count; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const s = (.5 + Math.random() * 1.5) * 5;
+            particles.push({ x: data.x, y: data.y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 1.5,
+                color: data.color, size: 1.5 + Math.random()*3.5, life: 1, decay: .03 + Math.random()*.03 });
+        }
+    });
+
+    function drawScene() {
+        ctx.fillStyle = '#07070f'; ctx.fillRect(0, 0, 1600, 600);
+        ctx.strokeStyle = 'rgba(255,255,255,.016)'; ctx.lineWidth = 1;
+        for (let x = 0; x < 1600; x += 50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,600); ctx.stroke(); }
+        for (let y = 0; y < 600; y += 50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(1600,y); ctx.stroke(); }
+        ctx.save(); ctx.strokeStyle = 'rgba(255,80,80,.07)'; ctx.lineWidth = 1; ctx.setLineDash([5,10]);
+        ctx.strokeRect(24, 24, canvas.width - 48, canvas.height - 48); ctx.restore();
+
+        const sg = ctx.createLinearGradient(400, 410, 400, 460);
+        sg.addColorStop(0, '#505065'); sg.addColorStop(1, '#2a2a3a');
+        ctx.fillStyle = sg; ctx.fillRect(400, 410, 800, 50);
+        ctx.fillStyle = '#727285'; ctx.fillRect(400, 410, 800, 3);
+        
+        const plats = [{ x: 240, y: 290, w: 260, h: 10 }, { x: 1100, y: 290, w: 260, h: 10 }];
+        plats.forEach(p => {
+            const pg = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+            pg.addColorStop(0, '#5e5e78'); pg.addColorStop(1, '#3a3a52');
+            ctx.fillStyle = pg; ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = '#7e7e98'; ctx.fillRect(p.x, p.y, p.w, 2);
+        });
+    }
+
+    socket.on('game_tick', (data) => {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.vy += .15; p.x += p.vx; p.y += p.vy; p.vx *= .92; p.life -= p.decay;
+            if (p.life <= 0) { particles.splice(i,1); continue; }
+        }
+
+        if (data.killcam && data.killcam.active) {
+            ctx.save(); ctx.fillStyle = 'black'; ctx.fillRect(0,0,1600,600);
+            ctx.translate(800, 300); ctx.scale(1.4, 1.4); ctx.translate(-data.killcam.x, -data.killcam.y);
+            drawScene();
+            renderEntities(data);
+            ctx.fillStyle = 'rgba(255,0,0,0.2)'; ctx.fillRect(data.killcam.x-800, data.killcam.y-300, 1600, 600); ctx.restore();
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, 60); ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+            return;
+        }
+
+        drawScene();
+        renderEntities(data);
+    });
+
+    function renderEntities(data) {
+        uiDiv.innerHTML = '';
+        
+        data.players.forEach(p => {
+            if (p.stocks <= 0 || p.isSpectator) return;
+
+            // Pseudo au-dessus
+            ctx.font = '700 12px Orbitron';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.name.toUpperCase(), p.x + p.w / 2, p.y - 22);
+
+            ctx.save();
+            const cr = p.isCharging ? Math.min(p.chargeFrames / 70, 1) : 0;
+            if (cr > 0) { ctx.shadowBlur = 14 + cr * 38; ctx.shadowColor = cr > .7 ? '#ff3333' : '#f1c40f'; }
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.restore();
+
+            if (p.hitstun > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
+                ctx.fillStyle = 'rgba(255,255,255,.52)'; ctx.fillRect(p.x, p.y, p.w, p.h);
+            }
+
+            ctx.fillStyle = 'rgba(255,255,255,.88)';
+            ctx.fillRect(p.facing === 1 ? p.x + 22 : p.x + 5, p.y + 10, 7, 7);
+
+            if (p.actionState === 'ATTACK_NORMAL') {
+                ctx.fillStyle = 'rgba(255,255,255,.28)';
+                ctx.fillRect(p.facing === 1 ? p.x + p.w : p.x - 35, p.y + 10, 35, 35);
+            }
+            if (p.actionState === 'ATTACK_CHARGED') {
+                const range = Math.round(42 + p.chargeSnap * (102 - 42));
+                const hbX = p.facing === 1 ? p.x + p.w : p.x - range;
+                const alpha = .22 + p.chargeSnap * .48;
+                ctx.save(); ctx.shadowBlur = 8 + p.chargeSnap * 22;
+                ctx.shadowColor = p.chargeSnap > .7 ? '#ff4444' : '#f1c40f';
+                ctx.fillStyle = p.chargeSnap > .7 ? `rgba(255,68,68,${alpha})` : `rgba(255,200,0,${alpha})`;
+                ctx.fillRect(hbX, p.y + 4, range, 48); ctx.restore();
+            }
+
+            // Jauge de charge
+            if (cr > .03) {
+                const bx = p.x - 3, by = p.y - 14, bw = 40, bh = 4;
+                ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(bx, by, bw, bh);
+                ctx.fillStyle = cr > .7 ? '#e74c3c' : (cr > .4 ? '#f39c12' : '#f1c40f');
+                ctx.fillRect(bx, by, bw * cr, bh);
+            }
+
+            if (p.y < 0 || p.x < 0 || p.x > canvas.width) {
+                let ix = Math.max(15, Math.min(canvas.width - 15, p.x + p.w/2));
+                let iy = Math.max(15, Math.min(canvas.height - 15, p.y + p.h/2));
+                ctx.save(); ctx.beginPath(); ctx.arc(ix, iy, 15, 0, Math.PI * 2);
+                ctx.fillStyle = p.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff'; ctx.stroke(); ctx.restore();
+            }
+
+            uiDiv.innerHTML += `
+                <div class="stats" style="border-bottom: 3px solid ${p.color}">
+                    <div class="stats-name">${p.name.toUpperCase()} (Kills: ${p.kills})</div>
+                    <div class="pct">${p.damage}%</div>
+                    <div class="stocks">${'⭐'.repeat(p.stocks)}</div>
+                </div>
+            `;
+        });
+
+        data.projectiles.forEach(proj => {
+            ctx.save(); ctx.shadowBlur = 14; ctx.shadowColor = proj.color || '#ff0000'; 
+            ctx.fillStyle = proj.color || '#ff0000'; ctx.beginPath(); ctx.arc(proj.x, proj.y, 6, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        });
+
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            ctx.save(); ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        }
+    }
+</script>
+</body>
+</html>

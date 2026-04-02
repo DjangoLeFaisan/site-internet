@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Smash JS — Tactical Edition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #07070f;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden;
+            font-family: 'Rajdhani', 'Arial Narrow', sans-serif; color: white;
+        }
+
+        /* ── BONUS SELECTION ── */
+        #bonus-screen {
+            display: flex; flex-direction: column; align-items: center; gap: 38px;
+            animation: fadeUp .5s ease;
+        }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        .title-wrap h1 {
+            font-family: 'Orbitron', 'Courier New', monospace;
+            font-size: 46px; font-weight: 900; letter-spacing: 6px; text-align: center;
+            background: linear-gradient(135deg, #f1c40f, #e67e22);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            filter: drop-shadow(0 0 28px rgba(241,196,15,.35));
+        }
+        .title-wrap p { color: #444; font-size: 13px; letter-spacing: 4px; text-transform: uppercase; text-align: center; margin-top: 8px; }
+
+        .bonus-cards { display: flex; gap: 20px; }
+        .bonus-card {
+            width: 188px; padding: 30px 22px; text-align: center; border-radius: 18px; cursor: pointer;
+            background: linear-gradient(160deg, rgba(255,255,255,.05), rgba(0,0,0,0));
+            border: 1px solid rgba(255,255,255,.08);
+            transition: transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s;
+            position: relative; overflow: hidden;
+        }
+        .bonus-card::after {
+            content:''; position:absolute; inset:0;
+            background: radial-gradient(circle at 50% -10%, rgba(241,196,15,.14), transparent 70%);
+            opacity:0; transition: opacity .22s;
+        }
+        .bonus-card:hover { transform: translateY(-8px) scale(1.03); border-color: rgba(241,196,15,.5); box-shadow: 0 24px 48px rgba(0,0,0,.55), 0 0 32px rgba(241,196,15,.12); }
+        .bonus-card:hover::after { opacity:1; }
+        .bonus-card:active { transform: translateY(-4px) scale(1.01); }
+        .bonus-icon { font-size: 52px; display:block; margin-bottom: 13px; }
+        .bonus-name { font-family: 'Orbitron', monospace; font-size: 10px; font-weight: 700; color: #f1c40f; letter-spacing: 2px; margin-bottom: 10px; }
+        .bonus-desc { font-size: 13px; color: #666; line-height: 1.55; }
+
+        /* ── GAME WRAPPER ── */
+        #game-wrapper { display:none; flex-direction:column; align-items:center; }
+        #ui { width:800px; display:flex; justify-content:space-between; margin-bottom:10px; }
+        .stats {
+            background: rgba(0,0,0,.65); backdrop-filter: blur(8px);
+            padding: 10px 14px; border-radius: 12px; min-width: 158px;
+            border: 1px solid rgba(255,255,255,.06);
+            display: flex; flex-direction: column; gap: 3px;
+        }
+        .p1-stats { border-bottom: 3px solid #e74c3c; }
+        .bot-stats { border-bottom: 3px solid #3498db; text-align: right; align-items: flex-end; display:flex; }
+        .stats-name { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:#555; }
+        .pct { font-family:'Orbitron',monospace; font-size:34px; font-weight:900; line-height:1.05; }
+        .p1-stats .pct { color:#e74c3c; }
+        .bot-stats .pct { color:#3498db; }
+        .stocks { color:#f1c40f; font-size:14px; letter-spacing:3px; }
+        .btag { font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px; color:#f1c40f; background:rgba(241,196,15,.1); border:1px solid rgba(241,196,15,.22); border-radius:20px; padding:2px 7px; display:inline-block; margin-top:2px; }
+
+        canvas { display:block; border-radius:6px; border:1px solid rgba(255,255,255,.04); box-shadow:0 0 60px rgba(0,0,0,.8); }
+        #instructions { margin-top:8px; color:#333; font-size:12px; text-align:center; line-height:1.9; }
+        #instructions b { color:#555; }
+    </style>
+</head>
+<body>
+
+<div id="bonus-screen">
+    <div class="title-wrap">
+        <h1>SUPER SMASH JS</h1>
+        <p>Choisissez votre bonus de départ</p>
+    </div>
+    <div class="bonus-cards">
+        <div class="bonus-card" onclick="startGame('triple_jump')">
+            <span class="bonus-icon">🦅</span>
+            <div class="bonus-name">TRIPLE SAUT</div>
+            <div class="bonus-desc">Un 3ème saut en l'air pour une mobilité aérienne supérieure</div>
+        </div>
+        <div class="bonus-card" onclick="startGame('damage_boost')">
+            <span class="bonus-icon">💥</span>
+            <div class="bonus-name">DÉGÂTS x1.5</div>
+            <div class="bonus-desc">Toutes vos attaques infligent 50% de dégâts supplémentaires</div>
+        </div>
+        <div class="bonus-card" onclick="startGame('speed_boost')">
+            <span class="bonus-icon">⚡</span>
+            <div class="bonus-name">VITESSE x1.3</div>
+            <div class="bonus-desc">Accélération et vitesse maximale augmentées de 30%</div>
+        </div>
+    </div>
+</div>
+
+<div id="game-wrapper">
+    <div id="ui">
+        <div class="stats p1-stats" style="flex-direction:column;">
+            <span class="stats-name">JOUEUR</span>
+            <span class="pct" id="p1-dmg">0%</span>
+            <span class="stocks" id="p1-stocks">⭐⭐⭐</span>
+            <span class="btag" id="p1-btag"></span>
+        </div>
+        <div class="stats bot-stats" style="flex-direction:column; align-items:flex-end;">
+            <span class="stats-name">BOT</span>
+            <span class="pct" id="bot-dmg">0%</span>
+            <span class="stocks" id="bot-stocks">⭐⭐⭐</span>
+            <span class="btag" id="bot-btag"></span>
+        </div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="instructions">
+        <b>←→</b> Déplacer &nbsp;·&nbsp; <b>↑</b> Sauter &nbsp;·&nbsp;
+        <b>Espace</b> Attaque normale &nbsp;·&nbsp; <b>X (maintenir)</b> Attaque chargée &nbsp;·&nbsp;
+        <b>C</b> Projectile &nbsp;·&nbsp; <b>R</b> Recommencer
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- GESTION FPS FIXE ---
+const FPS = 60;
+const frameInterval = 1000 / FPS;
+let lastTime = performance.now();
+
+// --- PHYSIQUE ---
+const GRAVITY       = 0.5;
+const JUMP_FORCE    = -11;
+const GROUND_ACCEL  = 0.9;
+const AIR_ACCEL     = 0.25;
+const MAX_SPEED     = 5.5;
+const FRICTION      = 0.82;
+const AIR_FRICTION  = 0.98;
+
+const mainStage = { x:200, y:410, w:400, h:50 };
+const platforms = [
+    { x:120, y:290, w:130, h:10 },
+    { x:550, y:290, w:130, h:10 }
+];
+
+// --- BALANCING ---
+const GLOBAL_SPEED_MUL  = 1.2;
+const GLOBAL_JUMP_MUL   = 1.0;
+const ATK_NORM_STARTUP  = 4;
+const ATK_NORM_ACTIVE   = 6;
+const ATK_NORM_ENDLAG   = 8;
+const ATK_NORM_DMG      = 8;
+const ATK_NORM_KB       = 5;
+const CHARGE_MAX        = 70;
+const ATK_CHRG_STARTUP  = 3;
+const ATK_CHRG_ACTIVE   = 10;
+const ATK_CHRG_ENDLAG_MIN = 20;
+const ATK_CHRG_ENDLAG_MAX = 50;
+const ATK_CHRG_DMG_MIN  = 10;
+const ATK_CHRG_DMG_MAX  = 30;
+const ATK_CHRG_KB_MIN   = 5;
+const ATK_CHRG_KB_MAX   = 15;
+const ATK_CHRG_RANGE_MIN= 42;
+const ATK_CHRG_RANGE_MAX= 102;
+const PROJ_STARTUP      = 8;
+const PROJ_ENDLAG       = 25;
+const PROJ_DMG          = 4;
+const PROJ_KB           = 2;
+const PROJ_SPEED_X      = 9;
+const PROJ_SPEED_Y      = -5;
+
+const BONUSES = {
+    triple_jump:  { name:'3RD JUMP', icon:'🦅', maxJumps:3, dmgMul:1.0, spdMul:1.0 },
+    damage_boost: { name:'DMG x1.5', icon:'💥', maxJumps:2, dmgMul:1.5, spdMul:1.0 },
+    speed_boost:  { name:'SPD x1.3', icon:'⚡', maxJumps:2, dmgMul:1.0, spdMul:1.3 }
+};
+const BONUS_KEYS = Object.keys(BONUSES);
+
+// --- INPUT ---
+const keys = {};
+let jumpOnce = false, cOnce = false, spaceOnce = false;
+let xHeld = false, xReleased = false;
+
+window.addEventListener('keydown', e => {
+    const wasUp = !keys[e.code];
+    keys[e.code] = true;
+    if (wasUp) {
+        if (e.code === 'ArrowUp') jumpOnce = true;
+        if (e.code === 'KeyC')    cOnce = true;
+        if (e.code === 'Space')   spaceOnce = true;
+        if (e.code === 'KeyX')    xHeld = true;
+    }
+    if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+    keys[e.code] = false;
+    if (e.code === 'KeyX') { xHeld = false; xReleased = true; }
+});
+
+let gameState = 'SELECTING';
+let winner = '';
+let p1 = null, bot = null;
+let projectiles = [], particles = [];
+let frameCount = 0;
+let killcamTimer = 0;
+let killcamX = 0, killcamY = 0;
+
+function startGame(bonusKey) {
+    const p1Bonus  = BONUSES[bonusKey];
+    const botBonus = BONUSES[BONUS_KEYS[Math.floor(Math.random() * BONUS_KEYS.length)]];
+    document.getElementById('bonus-screen').style.display = 'none';
+    document.getElementById('game-wrapper').style.display = 'flex';
+    document.getElementById('p1-btag').textContent  = p1Bonus.icon  + ' ' + p1Bonus.name;
+    document.getElementById('bot-btag').textContent = botBonus.icon + ' ' + botBonus.name;
+    projectiles = []; particles = []; killcamTimer = 0;
+    p1  = new Fighter(250, 300, '#e74c3c', false, p1Bonus);
+    bot = new Fighter(550, 300, '#3498db', true,  botBonus);
+    gameState = 'PLAYING';
+    updateUI();
+}
+
+function spawnParticles(x, y, color, count, speed) {
+    for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = (.5 + Math.random() * 1.5) * speed;
+        particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s - 1.5,
+            color, size:1.5 + Math.random()*3.5, life:1, decay:.036 + Math.random()*.04 });
+    }
+}
+
+function drawParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        if (killcamTimer <= 0) {
+            p.vy += .15; p.x += p.vx; p.y += p.vy; p.vx *= .92; p.life -= p.decay;
+        }
+        if (p.life <= 0) { particles.splice(i,1); continue; }
+        ctx.save(); ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Fighter {
+    constructor(x, y, color, isBot, bonus) {
+        this.x = x; this.y = y; this.w = 34; this.h = 54;
+        this.vx = 0; this.vy = 0;
+        this.color = color; this.isBot = isBot;
+        this.facing = isBot ? -1 : 1;
+        this.damage = 0; this.stocks = 3;
+        this.bonus = bonus;
+        this.maxJumps = bonus.maxJumps;
+        this.dmgMul = bonus.dmgMul;
+        this.spdMul = bonus.spdMul;
+        this.jumps = this.maxJumps;
+        this.hitstun = 0;
+        this.actionState = 'IDLE';
+        this.actionFrame = 0;
+        this.isAtk = false;
+        this.atkType = 'normal';
+        this.chargeSnap = 0;   
+        this.isCharging = false;
+        this.chargeFrames = 0;
+        this.aiState = 'IDLE';
+        this.aiTimer = 0;
+        this.aiChargeTarget = 0; // Cible de frames pour les attaques chargées
+        
+        // IA AMÉLIORÉE - Variables de recovery
+        this.aiRecoveryMode = 'NONE'; // 'NONE', 'DIRECT', 'PLATFORM_LEFT', 'PLATFORM_RIGHT', 'LOW_ANGLE', 'HIGH_FADE'
+        this.aiRecoveryPhase = 0; // Phase actuelle de la recovery
+        this.aiJumpTiming = 0; // Timing pour les sauts
+        this.aiRecoveryTarget = { x: 0, y: 0 }; // Position cible
+        
+        // IA AMÉLIORÉE - Détection de blocage
+        this.aiStuckCounter = 0;
+        this.aiLastX = x;
+        this.aiLastY = y;
+        this.aiStuckAction = 'NONE';
+        
+        // IA AMÉLIORÉE - Mémoire de position
+        this.aiPositionHistory = [];
+    }
+
+    get cx() { return this.x + this.w / 2; }
+    get cy() { return this.y + this.h / 2; }
+
+    update() {
+        this.vy += GRAVITY;
+        if (this.hitstun > 0) {
+            this.hitstun--;
+        } else {
+            if (this.isBot) this.runAI();
+            else this.handleInputs();
+            this.handleActionPhases();
+        }
+        const isG = this.onGround();
+        this.vx *= isG ? FRICTION : AIR_FRICTION;
+        const isChargedEndlag = (this.actionState === 'ATTACK_CHARGED' && this.actionFrame > ATK_CHRG_STARTUP + ATK_CHRG_ACTIVE);
+        if (this.hitstun <= 0 && !isChargedEndlag) {
+            const ms = MAX_SPEED * this.spdMul * GLOBAL_SPEED_MUL;
+            if (this.vx >  ms) this.vx =  ms;
+            if (this.vx < -ms) this.vx = -ms;
+        }
+        this.x += this.vx; this.y += this.vy;
+        this.checkCollisions();
+        this.checkDeath();
+    }
+
+    handleInputs() {
+        const isG = this.onGround();
+        const chargeSlow = this.isCharging ? 0.15 : 1;
+        const accel = (isG ? GROUND_ACCEL : AIR_ACCEL) * this.spdMul * chargeSlow * GLOBAL_SPEED_MUL;
+        if (keys['ArrowLeft'])  { this.vx -= accel; if (!this.isCharging && this.actionState === 'IDLE') this.facing = -1; }
+        if (keys['ArrowRight']) { this.vx += accel; if (!this.isCharging && this.actionState === 'IDLE') this.facing =  1; }
+        if (jumpOnce && this.jumps > 0) { this.vy = JUMP_FORCE * GLOBAL_JUMP_MUL; this.jumps--; }
+        if (this.isCharging) this.chargeFrames = Math.min(this.chargeFrames + 1, CHARGE_MAX);
+        if (xHeld && !this.isCharging && this.actionState === 'IDLE') { this.isCharging = true; this.chargeFrames = 0; }
+        if (xReleased) {
+            xReleased = false;
+            if (this.isCharging) {
+                const f = this.chargeFrames; this.isCharging = false; this.chargeFrames = 0;
+                this.chargedAttack(f);
+            }
+        }
+        if (spaceOnce && this.actionState === 'IDLE' && !this.isCharging) this.attack();
+        if (cOnce && this.actionState === 'IDLE' && !this.isCharging) this.shoot();
+    }
+
+    runAI() {
+        const opp = p1;
+        const dist = opp.cx - this.cx;
+        const absDist = Math.abs(dist);
+        const isG = this.onGround();
+        const accel = (isG ? GROUND_ACCEL : AIR_ACCEL) * this.spdMul * GLOBAL_SPEED_MUL;
+        const stageCenter = mainStage.x + mainStage.w / 2;
+
+        // ══════════════════════════════════════════════════════════
+        // 1. ANALYSE DE LA SITUATION (Désavantage / Neutre / Avantage)
+        // ══════════════════════════════════════════════════════════
+        const oppInAir = !opp.onGround();
+        const amInAir = !isG;
+        
+        const oppIsOffstage = oppInAir && (opp.x < mainStage.x - 10 || opp.x > mainStage.x + mainStage.w + 10);
+        const amOffstage = amInAir && (this.x < mainStage.x - 10 || this.x > mainStage.x + mainStage.w + 10);
+        const amHigh = amInAir && this.y < mainStage.y - 120;
+        
+        let phase = 'NEUTRAL';
+        if (amOffstage || amHigh) {
+            phase = 'DISADVANTAGE';
+        } else if (oppIsOffstage || opp.hitstun > 0 || (oppInAir && opp.y < this.y - 80)) {
+            phase = 'ADVANTAGE';
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 2. DÉSAVANTAGE : SURVIE ET RECOVERY
+        // ══════════════════════════════════════════════════════════
+        if (phase === 'DISADVANTAGE') {
+            this.aiTimer = 10; // Réflexion rapide en danger
+            const targetX = stageCenter;
+            const toTargetX = targetX - this.cx;
+
+            // Dérive vers le terrain de manière agressive
+            if (Math.abs(toTargetX) > 20) {
+                this.vx += (toTargetX > 0 ? AIR_ACCEL : -AIR_ACCEL) * 2.5;
+            }
+
+            // Mixup de saut pour revenir (Recovery)
+            if (this.jumps > 0) {
+                let shouldJump = false;
+                
+                // Danger de mort imminent en bas
+                if (this.y > mainStage.y + 20 && this.vy > -1) shouldJump = true;
+                // Trop loin du bord horizontalement, on assure le coup
+                else if (Math.abs(toTargetX) > mainStage.w/2 + 80 && this.vy > 0) shouldJump = true;
+                // Mixup tactique : 5% de chance de sauter tôt si on est en sécurité pour feinter
+                else if (Math.random() < 0.05 && this.y > mainStage.y - 50) shouldJump = true;
+
+                if (shouldJump) {
+                    this.vy = JUMP_FORCE * GLOBAL_JUMP_MUL;
+                    this.jumps--;
+                }
+            }
+            
+            // Esquive aléatoire si jonglé dans les airs
+            if (amHigh && opp.y > this.y && Math.random() < 0.1) {
+                this.vx += Math.random() > 0.5 ? 2 : -2;
+            }
+            
+            // On bloque le reste de l'IA pour se concentrer sur la survie
+            return; 
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 3. PRÉVENTION DE CHUTE STRICTE (Neutre & Avantage)
+        // ══════════════════════════════════════════════════════════
+        if (isG) {
+            const edgeLeft = mainStage.x;
+            const edgeRight = mainStage.x + mainStage.w;
+            
+            // S'approche plus du bord en avantage pour punir, sinon reste loin
+            const safetyMargin = phase === 'ADVANTAGE' ? 20 : 50; 
+            const lookAhead = 25; // Anticipe la vitesse
+            const futureX = this.x + this.vx * lookAhead;
+            
+            if (this.cx < edgeLeft + safetyMargin) {
+                if (this.vx < 0) this.vx *= 0.4; // Freinage lourd
+                if (this.cx < edgeLeft + 5 && this.vx < 0) this.vx = 0; // Arrêt d'urgence
+            }
+            if (this.cx > edgeRight - safetyMargin) {
+                if (this.vx > 0) this.vx *= 0.4;
+                if (this.cx > edgeRight - 5 && this.vx > 0) this.vx = 0;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 4. PRISE DE DÉCISION (Timer)
+        // ══════════════════════════════════════════════════════════
+        this.aiTimer--;
+        
+        // Poursuite instantanée si l'adversaire est étourdi (Combo)
+        if (phase === 'ADVANTAGE' && opp.hitstun > 0 && this.actionState === 'IDLE') {
+            this.aiTimer = 0;
+        }
+
+        if (this.aiTimer <= 0) {
+            const r = Math.random();
+
+            if (phase === 'ADVANTAGE') {
+                if (oppIsOffstage) {
+                    this.aiState = 'LEDGEGUARD';
+                    this.aiTimer = 20;
+                } else if (opp.hitstun > 0) {
+                    this.aiState = absDist < 60 ? 'ATTACK' : 'APPROACH';
+                    this.aiTimer = 5;
+                } else if (oppInAir && opp.y < this.y - 50) {
+                    // Prédiction de l'atterrissage du joueur
+                    this.aiState = r < 0.6 ? 'READ_LANDING' : 'SHOOT';
+                    this.aiTimer = 15;
+                } else {
+                    this.aiState = 'APPROACH';
+                    this.aiTimer = 10;
+                }
+            } 
+            else { // NEUTRAL
+                if (absDist < 60) {
+                    this.aiState = r < 0.4 ? 'ATTACK' : (r < 0.6 ? 'RETREAT' : 'CHARGE_ATTACK');
+                    this.aiTimer = 10;
+                } else if (absDist < 200) {
+                    this.aiState = r < 0.4 ? 'APPROACH' : (r < 0.7 ? 'SHOOT' : 'BAIT');
+                    this.aiTimer = 15;
+                } else {
+                    this.aiState = r < 0.7 ? 'SHOOT' : 'APPROACH';
+                    this.aiTimer = 20;
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 5. EXÉCUTION DES ÉTATS
+        // ══════════════════════════════════════════════════════════
+        switch(this.aiState) {
+            case 'LEDGEGUARD':
+                const targetEdgeX = opp.cx < stageCenter ? mainStage.x : mainStage.x + mainStage.w;
+                const distToEdge = targetEdgeX - this.cx;
+                
+                // Se positionner au bord prudemment
+                if (Math.abs(distToEdge) > 35) {
+                    this.vx += distToEdge > 0 ? accel : -accel;
+                } else {
+                    this.vx *= 0.5; // Stabilité au bord
+                    this.facing = opp.cx < this.cx ? -1 : 1; // Fixe la cible
+                    
+                    if (this.actionState === 'IDLE') {
+                        // Harcèlement au projectile si le joueur est loin
+                        if (Math.abs(opp.cx - this.cx) > 120 && Math.random() < 0.1) {
+                            this.shoot();
+                        }
+                        // Charge un smash s'il est proche de remonter
+                        else if (Math.abs(opp.cx - this.cx) <= 120 && opp.y > this.y - 50 && opp.y < this.y + 60 && Math.random() < 0.05) {
+                            this.isCharging = true;
+                            this.chargeFrames = 0;
+                            this.aiChargeTarget = 40;
+                            this.aiState = 'CHARGE_ATTACK';
+                        }
+                    }
+                }
+                break;
+
+            case 'READ_LANDING':
+                // Se place sous l'adversaire qui tombe
+                if (Math.abs(dist) > 20) {
+                    this.vx += dist > 0 ? accel : -accel;
+                } else if (this.actionState === 'IDLE' && opp.y > this.y - 120) {
+                    this.isCharging = true;
+                    this.chargeFrames = 0;
+                    this.aiChargeTarget = 30 + Math.floor(Math.random() * 20);
+                    this.aiState = 'CHARGE_ATTACK';
+                }
+                break;
+
+            case 'APPROACH':
+                this.vx += dist > 0 ? accel : -accel;
+                // Combo aérien : saute pour attraper la cible
+                if (phase === 'ADVANTAGE' && oppInAir && isG && this.jumps > 0 && opp.y < this.y - 20 && absDist < 100) {
+                    this.vy = JUMP_FORCE * GLOBAL_JUMP_MUL * 1.0;
+                    this.jumps--;
+                } else if (isG && Math.random() < 0.02 && this.jumps > 0) { 
+                    this.vy = JUMP_FORCE * GLOBAL_JUMP_MUL * 0.8;
+                    this.jumps--;
+                }
+                break;
+
+            case 'ATTACK':
+                if (absDist > 30) this.vx += dist > 0 ? accel : -accel; // Micro-spacing
+                if (this.actionState === 'IDLE') this.attack();
+                break;
+
+            case 'CHARGE_ATTACK':
+                if (this.actionState === 'IDLE' && !this.isCharging) {
+                    this.isCharging = true;
+                    this.chargeFrames = 0;
+                    this.aiChargeTarget = 20 + Math.floor(Math.random() * 30);
+                } else if (this.isCharging) {
+                    this.chargeFrames++;
+                    // Relâche si la cible entre dans la hitbox
+                    const range = Math.round(ATK_CHRG_RANGE_MIN + (this.chargeFrames / CHARGE_MAX) * (ATK_CHRG_RANGE_MAX - ATK_CHRG_RANGE_MIN));
+                    const hitboxX = this.facing === 1 ? this.x + this.w : this.x - range;
+                    const isOppInHitbox = hitboxX < opp.x + opp.w && hitboxX + range > opp.x && this.y < opp.y + opp.h && this.y + 50 > opp.y;
+
+                    if (this.chargeFrames >= this.aiChargeTarget || (isOppInHitbox && this.chargeFrames > 10)) {
+                        const f = this.chargeFrames;
+                        this.isCharging = false;
+                        this.chargeFrames = 0;
+                        this.chargedAttack(f);
+                    }
+                }
+                break;
+
+            case 'RETREAT':
+                this.vx += dist > 0 ? -accel * 1.2 : accel * 1.2;
+                break;
+
+            case 'SHOOT':
+                if (this.actionState === 'IDLE') this.shoot();
+                break;
+
+            case 'BAIT':
+                if (absDist < 80) this.vx += dist > 0 ? -accel : accel;
+                else if (absDist > 120) this.vx += dist > 0 ? accel : -accel;
+                if (Math.random() < 0.05 && this.actionState === 'IDLE') this.shoot();
+                break;
+        }
+
+        // Orientation visuelle standard
+        if (this.actionState === 'IDLE' && !this.isCharging && this.aiState !== 'LEDGEGUARD') {
+            this.facing = dist > 0 ? 1 : -1;
+        }
+    }
+
+    // Fonction helper améliorée pour vérifier le sol en dessous
+    checkGroundBelow() {
+        const checkX = this.cx;
+        const checkYShort = this.y + this.h + 60; // Regarder 60px en dessous
+        const checkYFar = this.y + this.h + 120; // Regarder plus loin pour mieux anticiper
+        
+        // Vérifier stage principal (avec marge)
+        const stageMargin = 30;
+        if (checkX > mainStage.x - stageMargin && checkX < mainStage.x + mainStage.w + stageMargin) {
+            if (checkYShort > mainStage.y) return true;
+        }
+        
+        // Vérifier plateformes (avec marge)
+        const platMargin = 20;
+        for (const p of platforms) {
+            if (checkX > p.x - platMargin && checkX < p.x + p.w + platMargin) {
+                if (checkYShort > p.y) return true;
+            }
+        }
+        
+        // Vérification anticipée plus loin
+        if (checkX > mainStage.x - stageMargin && checkX < mainStage.x + mainStage.w + stageMargin) {
+            if (checkYFar > mainStage.y) return 'far'; // Indique sol loin
+        }
+        
+        for (const p of platforms) {
+            if (checkX > p.x - platMargin && checkX < p.x + p.w + platMargin) {
+                if (checkYFar > p.y) return 'far';
+            }
+        }
+        
+        return false;
+    }
+
+    handleActionPhases() {
+        if (this.actionState === 'IDLE') { this.isAtk = false; return; }
+        this.actionFrame++;
+        if (this.actionState === 'ATTACK_NORMAL') {
+            if (this.actionFrame === ATK_NORM_STARTUP) {
+                this.isAtk = true; this.atkType = 'normal';
+                this.checkMeleeHit(ATK_NORM_DMG, ATK_NORM_KB, 35, 38);
+            } else if (this.actionFrame === ATK_NORM_STARTUP + ATK_NORM_ACTIVE) {
+                this.isAtk = false;
+            } else if (this.actionFrame >= ATK_NORM_STARTUP + ATK_NORM_ACTIVE + ATK_NORM_ENDLAG) {
+                this.actionState = 'IDLE';
+            }
+        } 
+        else if (this.actionState === 'ATTACK_CHARGED') {
+            const lvl = this.chargeSnap;
+            const activeLimit = ATK_CHRG_STARTUP + ATK_CHRG_ACTIVE;
+            const endLag = Math.round(ATK_CHRG_ENDLAG_MIN + lvl * (ATK_CHRG_ENDLAG_MAX - ATK_CHRG_ENDLAG_MIN));
+            if (this.actionFrame === ATK_CHRG_STARTUP) {
+                this.isAtk = true; this.atkType = 'charged';
+                const range = Math.round(ATK_CHRG_RANGE_MIN + lvl * (ATK_CHRG_RANGE_MAX - ATK_CHRG_RANGE_MIN));
+                const dmg = Math.round(ATK_CHRG_DMG_MIN + lvl * (ATK_CHRG_DMG_MAX - ATK_CHRG_DMG_MIN));
+                const kb = ATK_CHRG_KB_MIN + lvl * (ATK_CHRG_KB_MAX - ATK_CHRG_KB_MIN);
+                this.checkMeleeHit(dmg, kb, range, 50);
+            } else if (this.actionFrame === activeLimit) {
+                this.isAtk = false;
+            } else if (this.actionFrame >= activeLimit + endLag) {
+                this.actionState = 'IDLE';
+            }
+        }
+        else if (this.actionState === 'SHOOT') {
+            if (this.actionFrame === PROJ_STARTUP) {
+                projectiles.push({
+                    x: this.x + (this.facing === 1 ? this.w : -14), y: this.y + 15,
+                    vx: this.facing * PROJ_SPEED_X, vy: PROJ_SPEED_Y,
+                    owner: this, color: this.isBot ? '#60b8e0' : '#e87070',
+                    dmg: PROJ_DMG, kb: PROJ_KB
+                });
+            } else if (this.actionFrame >= PROJ_STARTUP + PROJ_ENDLAG) {
+                this.actionState = 'IDLE';
+            }
+        }
+    }
+
+    attack() { if (this.actionState === 'IDLE') { this.actionState = 'ATTACK_NORMAL'; this.actionFrame = 0; } }
+    chargedAttack(frames) { if (this.actionState === 'IDLE') { this.chargeSnap = Math.min(frames / CHARGE_MAX, 1); this.actionState = 'ATTACK_CHARGED'; this.actionFrame = 0; } }
+    shoot() { if (this.actionState === 'IDLE') { this.actionState = 'SHOOT'; this.actionFrame = 0; } }
+
+    checkMeleeHit(baseDmg, baseKb, range, height) {
+        const opp = this.isBot ? p1 : bot;
+        const hbX = this.facing === 1 ? this.x + this.w : this.x - range;
+        if (hbX < opp.x + opp.w && hbX + range > opp.x && this.y < opp.y + opp.h && this.y + height > opp.y) {
+            opp.takeDamage(this.facing, Math.round(baseDmg * this.dmgMul), baseKb);
+            spawnParticles(opp.cx, opp.cy, '#ffffff', 8, 3);
+        }
+    }
+
+    takeDamage(dir, dmg, kb) {
+        const force = kb + (this.damage + dmg) * 0.18;
+        if (this.stocks === 1 && (this.damage + dmg) >= 100 && force >= 15) {
+            killcamTimer = 60; killcamX = this.cx; killcamY = this.cy;
+        }
+        this.damage += dmg; updateUI();
+        this.vx = dir * force; this.vy = -force * 0.45;
+        this.hitstun = Math.round(12 + this.damage * 0.12);
+        this.isCharging = false; this.actionState = 'IDLE'; this.isAtk = false;
+        this.aiRecoveryMode = 'NONE';
+        this.aiStuckCounter = 0;
+    }
+
+    onGround() {
+        if (this.vy >= 0 && this.y + this.h >= mainStage.y && this.y + this.h <= mainStage.y + 15
+            && this.x + this.w > mainStage.x && this.x < mainStage.x + mainStage.w) return true;
+        for (const p of platforms)
+            if (this.vy >= 0 && this.y + this.h >= p.y && this.y + this.h <= p.y + 12
+                && this.x + this.w > p.x && this.x < p.x + p.w) return true;
+        return false;
+    }
+
+    checkCollisions() {
+        if (this.x + this.w > mainStage.x && this.x < mainStage.x + mainStage.w
+            && this.y + this.h > mainStage.y && this.y < mainStage.y + mainStage.h) {
+            const ft = Math.abs((this.y + this.h) - mainStage.y);
+            const fb = Math.abs(this.y - (mainStage.y + mainStage.h));
+            const fl = Math.abs((this.x + this.w) - mainStage.x);
+            const fr = Math.abs(this.x - (mainStage.x + mainStage.w));
+            const mn = Math.min(ft, fb, fl, fr);
+            if      (mn === ft && this.vy >= 0) { this.y = mainStage.y - this.h; this.vy = 0; this.jumps = this.maxJumps; }
+            else if (mn === fb && this.vy < 0)  { this.y = mainStage.y + mainStage.h; this.vy = 0.5; }
+            else if (mn === fl) { this.x = mainStage.x - this.w; this.vx = 0; }
+            else if (mn === fr) { this.x = mainStage.x + mainStage.w; this.vx = 0; }
+        }
+        for (const p of platforms)
+            if (this.vy > 0 && this.y + this.h >= p.y && this.y + this.h <= p.y + 14
+                && this.x + this.w > p.x && this.x < p.x + p.w) {
+                this.y = p.y - this.h; this.vy = 0; this.jumps = this.maxJumps;
+            }
+    }
+
+    checkDeath() {
+        if (this.x < -180 || this.x > canvas.width + 180 || this.y > canvas.height + 160 || this.y < -270) {
+            let ex = Math.max(15, Math.min(canvas.width - 15, this.cx));
+            let ey = Math.max(15, Math.min(canvas.height - 15, this.cy));
+            spawnParticles(ex, ey, this.color, 45, 10);
+            spawnParticles(ex, ey, '#ffffff', 25, 15);
+            spawnParticles(ex, ey, '#f1c40f', 20, 8);
+            this.stocks--; this.x = this.isBot ? 550 : 250; this.y = 100;
+            this.vx = 0; this.vy = 0; this.damage = 0; this.jumps = this.maxJumps;
+            this.aiRecoveryMode = 'NONE';
+            this.aiStuckCounter = 0;
+            this.aiPositionHistory = [];
+            updateUI();
+            if (this.stocks <= 0) { gameState = 'GAMEOVER'; winner = this.isBot ? 'VICTOIRE' : 'DÉFAITE'; }
+        }
+    }
+
+    draw() {
+        const cr = this.isCharging ? Math.min(this.chargeFrames / CHARGE_MAX, 1) : 0;
+        ctx.save();
+        if (cr > 0) { ctx.shadowBlur = 14 + cr * 38; ctx.shadowColor = cr > .7 ? '#ff3333' : '#f1c40f'; }
+        ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.restore();
+
+        if (this.hitstun > 0 && Math.floor(frameCount / 3) % 2 === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,.52)'; ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+
+        ctx.fillStyle = 'rgba(255,255,255,.88)';
+        ctx.fillRect(this.facing === 1 ? this.x + 22 : this.x + 5, this.y + 10, 7, 7);
+
+        if (this.isAtk) {
+            if (this.atkType === 'charged') {
+                const range = Math.round(ATK_CHRG_RANGE_MIN + this.chargeSnap * (ATK_CHRG_RANGE_MAX - ATK_CHRG_RANGE_MIN));
+                const hbX = this.facing === 1 ? this.x + this.w : this.x - range;
+                const alpha = .22 + this.chargeSnap * .48;
+                ctx.save(); ctx.shadowBlur = 8 + this.chargeSnap * 22;
+                ctx.shadowColor = this.chargeSnap > .7 ? '#ff4444' : '#f1c40f';
+                ctx.fillStyle = this.chargeSnap > .7 ? `rgba(255,68,68,${alpha})` : `rgba(255,200,0,${alpha})`;
+                ctx.fillRect(hbX, this.y + 4, range, 48); ctx.restore();
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,.28)';
+                ctx.fillRect(this.facing === 1 ? this.x + this.w : this.x - 35, this.y + 10, 35, 35);
+            }
+        }
+
+        if (cr > .03) {
+            const bx = this.x - 3, by = this.y - 14, bw = 40, bh = 4;
+            ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(bx, by, bw, bh);
+            ctx.fillStyle = cr > .7 ? '#e74c3c' : (cr > .4 ? '#f39c12' : '#f1c40f');
+            ctx.fillRect(bx, by, bw * cr, bh);
+        }
+
+        if (gameState === 'PLAYING') {
+            const pad = 25;
+            if (this.cx < 0 || this.cx > canvas.width || this.cy < 0 || this.cy > canvas.height) {
+                let ix = Math.max(pad, Math.min(canvas.width - pad, this.cx));
+                let iy = Math.max(pad, Math.min(canvas.height - pad, this.cy));
+                ctx.save(); ctx.beginPath(); ctx.arc(ix, iy, 15, 0, Math.PI * 2);
+                ctx.fillStyle = this.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+                ctx.restore();
+            }
+        }
+    }
+}
+
+function updateUI() {
+    if (!p1 || !bot) return;
+    document.getElementById('p1-dmg').textContent = p1.damage + '%';
+    document.getElementById('bot-dmg').textContent = bot.damage + '%';
+    document.getElementById('p1-stocks').textContent = '⭐'.repeat(Math.max(0, p1.stocks));
+    document.getElementById('bot-stocks').textContent = '⭐'.repeat(Math.max(0, bot.stocks));
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,600);
+    ctx.textAlign = 'center'; ctx.fillStyle = 'white'; ctx.font = '40px Orbitron';
+    ctx.fillText(winner + " !", 400, 280);
+    ctx.font = '20px Rajdhani'; ctx.fillText("Appuyez sur R pour recommencer", 400, 330);
+}
+
+window.addEventListener('keydown', e => {
+    if (e.code === 'KeyR' && gameState === 'GAMEOVER') {
+        gameState = 'SELECTING';
+        document.getElementById('game-wrapper').style.display = 'none';
+        document.getElementById('bonus-screen').style.display = 'flex';
+    }
+});
+
+function drawScene() {
+    ctx.fillStyle = '#07070f'; ctx.fillRect(0, 0, 800, 600);
+    ctx.strokeStyle = 'rgba(255,255,255,.016)'; ctx.lineWidth = 1;
+    for (let x = 0; x < 800; x += 50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,600); ctx.stroke(); }
+    for (let y = 0; y < 600; y += 50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(800,y); ctx.stroke(); }
+    ctx.save(); ctx.strokeStyle = 'rgba(255,80,80,.07)'; ctx.lineWidth = 1; ctx.setLineDash([5,10]);
+    ctx.strokeRect(24, 24, canvas.width - 48, canvas.height - 48); ctx.restore();
+    const sg = ctx.createLinearGradient(mainStage.x, mainStage.y, mainStage.x, mainStage.y + mainStage.h);
+    sg.addColorStop(0, '#505065'); sg.addColorStop(1, '#2a2a3a');
+    ctx.fillStyle = sg; ctx.fillRect(mainStage.x, mainStage.y, mainStage.w, mainStage.h);
+    ctx.fillStyle = '#727285'; ctx.fillRect(mainStage.x, mainStage.y, mainStage.w, 3);
+    platforms.forEach(p => {
+        const pg = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+        pg.addColorStop(0, '#5e5e78'); pg.addColorStop(1, '#3a3a52');
+        ctx.fillStyle = pg; ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = '#7e7e98'; ctx.fillRect(p.x, p.y, p.w, 2);
+    });
+}
+
+function loop(timestamp) {
+    requestAnimationFrame(loop);
+    const deltaTime = timestamp - lastTime;
+    if (deltaTime >= frameInterval) {
+        lastTime = timestamp - (deltaTime % frameInterval);
+        if (gameState === 'SELECTING') return;
+        if (killcamTimer > 0) {
+            killcamTimer--;
+            ctx.save(); ctx.fillStyle = 'black'; ctx.fillRect(0,0,800,600);
+            ctx.translate(400, 300); ctx.scale(1.4, 1.4); ctx.translate(-killcamX, -killcamY);
+            drawScene(); if (p1) p1.draw(); if (bot) bot.draw(); drawParticles();
+            ctx.fillStyle = 'rgba(255,0,0,0.2)'; ctx.fillRect(killcamX-400, killcamY-300, 800, 600); ctx.restore();
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, 60); ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+            spaceOnce = jumpOnce = cOnce = xReleased = false; return;
+        }
+        drawScene();
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i]; p.vy += .25; p.x += p.vx; p.y += p.vy;
+            ctx.save(); ctx.shadowBlur = 14; ctx.shadowColor = p.color; 
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2); ctx.fill(); ctx.restore();
+            const opp = p.owner.isBot ? p1 : bot;
+            if (opp && p.x > opp.x && p.x < opp.x + opp.w && p.y > opp.y && p.y < opp.y + opp.h) {
+                opp.takeDamage(p.vx > 0 ? 1 : -1, p.dmg, p.kb); projectiles.splice(i, 1);
+            } else if (p.y > 650 || p.x < -50 || p.x > 850) projectiles.splice(i, 1);
+        }
+        if (gameState === 'PLAYING') { p1.update(); bot.update(); }
+        p1.draw(); bot.draw(); drawParticles();
+        if (gameState === 'GAMEOVER') drawGameOver();
+        spaceOnce = jumpOnce = cOnce = xReleased = false; frameCount++;
+    }
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
